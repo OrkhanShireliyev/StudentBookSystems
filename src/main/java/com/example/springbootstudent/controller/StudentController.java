@@ -8,7 +8,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.*;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.AllArgsConstructor;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,14 +22,10 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
+@AllArgsConstructor
 @Tag(name = "Student Controller", description = "Operations related to student management")
 public class StudentController {
- private final StudentServiceJpa studentServiceInter;
-
- @Autowired
- public StudentController(StudentServiceJpa studentServiceInter) {
-  this.studentServiceInter = studentServiceInter;
- }
+     private final StudentServiceJpa studentServiceInter;
 
  @Operation(summary = "Save student", description = "Fill student information and save it!")
  @ApiResponses(value = {
@@ -35,8 +33,9 @@ public class StudentController {
          @ApiResponse(responseCode = "500", description = "Can't save student!")
  })
  @PostMapping("/save")
- public void save(@RequestBody StudentRequest studentRequest) {
+ public ResponseEntity<StudentRequest> save(@RequestBody StudentRequest studentRequest) {
   studentServiceInter.save(studentRequest);
+  return new ResponseEntity<>(studentRequest,HttpStatus.OK);
  }
 
  @Operation(summary = "Save student with image", description = "Fill student information and save it!")
@@ -110,7 +109,6 @@ public class StudentController {
                         @PathVariable int age,
                         @PathVariable int score,
                         @PathVariable String groupName){
-
        studentServiceInter.putById(id,name,surname,age,score,groupName);
     }
 
@@ -153,4 +151,6 @@ public class StudentController {
     public void updateGroupName(@RequestParam Long id,@RequestParam String groupName){
        studentServiceInter.updateGroupName(id,groupName);
     }
+
+
 }

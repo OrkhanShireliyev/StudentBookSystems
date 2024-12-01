@@ -7,6 +7,8 @@ import com.example.springbootstudent.exception.NotFoundException;
 import com.example.springbootstudent.model.Student;
 import com.example.springbootstudent.repository.jpa.StudentRepositoryJpa;
 import com.example.springbootstudent.service.inter.StudentServiceInter;
+import com.example.springbootstudent.service.redis.StudentRedisService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,12 +26,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@Slf4j
 public class StudentServiceJpa implements StudentServiceInter {
 
     private final StudentRepositoryJpa studentRepositoryJPA;
 
-    public StudentServiceJpa(StudentRepositoryJpa studentRepositoryJPA) {
+    private final StudentRedisService studentRedisService;
+
+    public StudentServiceJpa(StudentRepositoryJpa studentRepositoryJPA, StudentRedisService studentRedisService) {
         this.studentRepositoryJPA = studentRepositoryJPA;
+        this.studentRedisService = studentRedisService;
     }
 
     @Override
@@ -52,9 +58,12 @@ public class StudentServiceJpa implements StudentServiceInter {
                                         .age(studentRequest.getAge())
                                                 .score(studentRequest.getScore())
                                                         .groupName(studentRequest.getGroupName())
+                                                            .imagePath(studentRequest.getImagePath())
                                                                 .build();
 
-      studentRepositoryJPA.save(student);
+        Student saveDb=studentRepositoryJPA.save(student);
+        studentRedisService.save(saveDb);
+        log.info("Successfully saved{}",saveDb);
     }
 
     public void saveStudentWithImage(String name,String surname,int age,int score,String groupName, MultipartFile file){
@@ -79,6 +88,7 @@ public class StudentServiceJpa implements StudentServiceInter {
                             .build();
 
             studentRepositoryJPA.save(student);
+            studentRedisService.save(student);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -120,14 +130,28 @@ public class StudentServiceJpa implements StudentServiceInter {
     @Override
     public List<StudentDTO> getAll() {
         StudentDTO studentDTO;
-        List<StudentDTO> studentDTOS=new ArrayList<>();
-        List<Student> students=studentRepositoryJPA.findAll();
+        List<Student> returnStudent;
+        List<Student> students;
 
-        if (students==null){
-            throw new NotFoundException("Not found students!");
+        List<StudentDTO> studentDTOS=new ArrayList<>();
+        List<Student> studentsRedis=studentRedisService.getAll();
+        if (studentsRedis==null){
+            throw new NotFoundException("Not found student in redis!");
         }
 
-        for (Student student:students){
+        if (studentsRedis!=null){
+            returnStudent=studentsRedis;
+            log.info("Students retrieved from redis!");
+        }else{
+            students=studentRepositoryJPA.findAll();
+            returnStudent=students;
+            if (students==null){
+                throw new NotFoundException("Not found student!");
+            }
+            log.info("Students retrieved from db!");
+        }
+
+        for (Student student:returnStudent){
             studentDTO=StudentDTO.builder()
                     .name(student.getName())
                     .surname(student.getSurname())
@@ -139,101 +163,234 @@ public class StudentServiceJpa implements StudentServiceInter {
 
             studentDTOS.add(studentDTO);
         }
+        log.info("Successfully retrieved{}",studentsRedis);
         return studentDTOS;
     }
 
     @Override
     public StudentDTO getStudentById(Long id) {
 
-        Student studentById=studentRepositoryJPA.findById(id).get();
+        Student student;
 
-        if (studentById==null){
-            throw new NotFoundException("Not found student with id=" + id);
+        Student studentById;
+
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }else {
+            studentById=studentRepositoryJPA.findById(id).get();
+            student=studentById;
+            log.info("Student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
         }
 
         StudentDTO studentDTO=StudentDTO.builder()
-                .name(studentById.getName())
-                .surname(studentById.getSurname())
-                .age(studentById.getAge())
-                .score(studentById.getScore())
-                .groupName(studentById.getGroupName())
+                .name(student.getName())
+                .surname(student.getSurname())
+                .age(student.getAge())
+                .score(student.getScore())
+                .groupName(student.getGroupName())
                 .build();
-
+        log.info("Successfully retrieved{}",studentDTO);
         return studentDTO;
     }
 
     @Override
     public void deleteStudentById(Long id) {
-        Student studentById=studentRepositoryJPA.findById(id).get();
 
-        if (studentById==null){
-            throw new NotFoundException("Not found student with id=" + id);
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            studentRedisService.delete(id);
+            log.info("Deleted student by id="+id+" retrieved from redis!");
         }
 
-        studentRepositoryJPA.deleteById(id);
+        Student studentById=studentRepositoryJPA.findById(id).get();
+
+        if (studentById!=null){
+            studentRepositoryJPA.deleteById(id);
+            log.info("Deleted student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
+        }
     }
 
     @Override
     public void putById(Long id, String name, String surname, int age, int score, String groupName) {
-        Student studentById=studentRepositoryJPA.findById(id).get();
+        Student student = new Student();
 
+        Student studentByRedis=studentRedisService.getStudent(id);
+        if (studentByRedis==null){
+            throw new NotFoundException("Not found student at redis with id=" + id);
+        }
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }
+
+        Student studentById=studentRepositoryJPA.findById(id).get();
         if (studentById==null){
+            throw new NotFoundException("Not found student at db with id=" + id);
+        }
+
+        if (studentById!=null){
+            student=studentById;
+            log.info("Student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
+        }
+
+        if (student==null){
             throw new NotFoundException("Not found student with id=" + id);
         }
-        studentById.setName(name);
-        studentById.setSurname(surname);
-        studentById.setAge(age);
-        studentById.setScore(score);
-        studentById.setGroupName(groupName);
 
-        studentRepositoryJPA.save(studentById);
+        student.setName(name);
+        student.setSurname(surname);
+        student.setAge(age);
+        student.setScore(score);
+        student.setGroupName(groupName);
+
+        studentRepositoryJPA.save(student);
+        studentRedisService.update(student);
+        log.info("Successfully updated{}",student);
     }
 
     @Override
     public void updateName(Long id, String name) {
+        Student student = new Student();
+
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }
+
         Student studentById=studentRepositoryJPA.findById(id).get();
 
-        if (studentById==null){
+        if (studentById!=null){
+            student=studentById;
+            log.info("Student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
+        }
+
+        if (student==null){
             throw new NotFoundException("Not found student with id=" + id);
         }
-        studentById.setName(name);
+        student.setName(name);
 
-        studentRepositoryJPA.save(studentById);
+        studentRepositoryJPA.save(student);
+        studentRedisService.update(student);
+        log.info("Successfully updated name{}",student);
     }
 
     @Override
     public void updateSurname(Long id, String surname) {
+        Student student = new Student();
+
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }
+
         Student studentById=studentRepositoryJPA.findById(id).get();
 
-        if (studentById==null){
+        if (studentById!=null){
+
+                studentById=studentRepositoryJPA.findById(id).get();
+                student=studentById;
+                log.info("Student by id="+id+" retrieved from db!");
+                if (studentById==null) {
+                    throw new NotFoundException("Not found student with id=" + id);
+                }
+            }
+
+
+        if (student==null){
             throw new NotFoundException("Not found student with id=" + id);
         }
-        studentById.setSurname(surname);
 
-        studentRepositoryJPA.save(studentById);
+        student.setSurname(surname);
+
+        studentRepositoryJPA.save(student);
+        studentRedisService.update(student);
+        log.info("Successfully updated surname{}",student);
     }
 
     @Override
     public void updateAge(Long id, int age) {
+        Student student = new Student();
+
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }
+
         Student studentById=studentRepositoryJPA.findById(id).get();
 
-        if (studentById==null){
+        if (studentById!=null){
+            studentById=studentRepositoryJPA.findById(id).get();
+            student=studentById;
+            log.info("Student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
+        }
+
+        if (student==null){
             throw new NotFoundException("Not found student with id=" + id);
         }
-        studentById.setAge(age);
 
-        studentRepositoryJPA.save(studentById);
+        student.setAge(age);
+
+        studentRepositoryJPA.save(student);
+        studentRedisService.update(student);
+        log.info("Successfully updated age{}",student);
     }
 
     @Override
     public void updateGroupName(Long id, String groupName) {
+        Student student = new Student();
+
+        Student studentByRedis=studentRedisService.getStudent(id);
+
+        if (studentByRedis!=null){
+            student=studentByRedis;
+            log.info("Student by id="+id+" retrieved from redis!");
+        }
+
         Student studentById=studentRepositoryJPA.findById(id).get();
 
-        if (studentById==null){
+        if (studentById!=null){
+            studentById=studentRepositoryJPA.findById(id).get();
+            student=studentById;
+            log.info("Student by id="+id+" retrieved from db!");
+            if (studentById==null) {
+                throw new NotFoundException("Not found student with id=" + id);
+            }
+        }
+
+        if (student==null){
             throw new NotFoundException("Not found student with id=" + id);
         }
-        studentById.setGroupName(groupName);
 
-        studentRepositoryJPA.save(studentById);
+        student.setGroupName(groupName);
+
+        studentRepositoryJPA.save(student);
+        studentRedisService.update(student);
+        log.info("Successfully updated group name{}",student);
     }
 }

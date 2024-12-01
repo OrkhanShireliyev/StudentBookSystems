@@ -6,11 +6,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
 
 @Entity
 @Data
 @Builder
-public class Student {
+@NoArgsConstructor
+public class Student implements Serializable {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -49,7 +53,5 @@ public class Student {
         this.imagePath = imagePath;
     }
 
-    public Student() {
 
-    }
 }

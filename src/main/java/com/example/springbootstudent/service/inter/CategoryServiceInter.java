@@ -1,8 +1,7 @@
 package com.example.springbootstudent.service.inter;
 
 import com.example.springbootstudent.controller.request.CategoryRequest;
-import com.example.springbootstudent.dto.StudentDTO;
-import com.example.springbootstudent.model.Category;
+import com.example.springbootstudent.dto.CategoryDTO;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,9 +11,9 @@ public interface CategoryServiceInter {
 
     void save(CategoryRequest categoryRequest);
 
-    List<CategoryRequest> getAll();
+    List<CategoryDTO> getAll();
 
-    CategoryRequest getCategoryById(Long id);
+    CategoryDTO getCategoryById(Long id);
 
     void putById(Long id,String name);
 
