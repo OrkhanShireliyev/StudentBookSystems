@@ -20,9 +20,7 @@ import java.util.List;
 @Tag(name = "Author Controller", description = "Operations related to author management")
 @Slf4j
 public class AuthorController {
-
     private final AuthorServiceInter authorServiceInter;
-
     public AuthorController(AuthorServiceInter authorServiceInter) {
         this.authorServiceInter = authorServiceInter;
     }
